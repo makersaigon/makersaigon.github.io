@@ -1,281 +1,540 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>MakersG — Flash Firmware ESP</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Firmware Flasher — ENTECH</title>
+<style>
+  :root{
+    --bg:#0f1115;
+    --card:#111418;
+    --muted:#9aa6b2;
+    --accent:#00d4ff;
+    --accent-2:#29c2ff;
+    --success:#20c997;
+    --danger:#ff6b6b;
+    --glass: rgba(255,255,255,0.02);
+    --radius:12px;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    color-scheme: dark;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background: linear-gradient(180deg,#0b0c0e 0%, #0f1115 100%);
+    color:#d6e7ef;
+    padding:28px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:980px;margin:0 auto;}
+  .card{
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:var(--radius);
+    padding:20px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.03);
+  }
 
-  <meta name="theme-color" content="#0f1720" />
+  h1{margin:0 0 8px;font-size:20px;color:var(--accent);}
+  h2{font-size:18px;margin:18px 0 12px;color:#7fe7ff;}
+  p.lead{color:var(--muted);margin:0 0 18px;}
 
-  <!-- esp-web-tools -->
-  <script type="module" src="https://unpkg.com/esp-web-tools@latest/dist/web/install-button.js"></script>
+  .selector-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .option{
+    background:var(--card);
+    padding:14px 16px;
+    border-radius:10px;
+    min-width:170px;
+    text-align:center;
+    cursor:pointer;
+    transition:all .15s ease;
+    border:1px solid rgba(255,255,255,0.02);
+  }
+  .option:hover{transform:translateY(-4px); box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  .option.selected{border:1px solid var(--accent); box-shadow: 0 6px 28px rgba(0,212,255,0.06); outline: 3px solid rgba(0,212,255,0.06); }
+  .option .title{font-weight:600;margin-bottom:6px;}
+  .meta{font-size:13px;color:var(--muted);}
 
-  <link rel="icon" href="assets/favicon.ico" />
+  .actions{display:flex;gap:12px;margin-top:18px;}
+  .btn{
+    background:linear-gradient(180deg,var(--accent) 0%, var(--accent-2) 100%);
+    color:#00171a;
+    border:none;padding:12px 18px;border-radius:9px;font-weight:600;cursor:pointer;
+    box-shadow:0 6px 18px rgba(0,0,0,0.4);
+  }
+  .btn.secondary{
+    background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.04);
+  }
+  .btn:disabled{opacity:0.5;cursor:not-allowed}
 
-  <style>
-    :root {
-      --bg: #0b0f12; --surface: #0f1417; --muted: #9aa6b2; --text: #e6eef6;
-      --brand-accent: #58a6ff; --brand-strong: #cfe9ff;
-      --radius: 12px; --glass: rgba(255,255,255,0.03);
-      --shadow: 0 10px 30px rgba(2,6,23,0.4);
-    }
-    :root[data-theme='light'] {
-      --bg: #fafbfc; --surface: #fff; --muted: #556677; --text: #091023;
-      --brand-accent: #0a84ff; --brand-strong: #0f7fff;
-      --shadow: 0 10px 30px rgba(11,18,32,0.12);
-    }
+  .panel{
+    margin-top:18px;padding:14px;border-radius:10px;background:var(--glass);border:1px solid rgba(255,255,255,0.02);
+  }
 
-    /* Global */
-    body {
-      margin: 0; background: var(--bg);
-      background-image: linear-gradient(180deg, rgba(88,166,255,0.02), transparent);
-      color: var(--text);
-      font-family: Inter, system-ui, -apple-system, sans-serif;
-    }
-    .wrap { max-width: 960px; margin: 36px auto; padding: 20px; }
-    .flex { display: flex; align-items: center; }
-    .gap { gap: 12px; }
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .spacer{flex:1}
 
-    /* HEADER */
-    header.brand { justify-content: space-between; margin-bottom: 20px; }
-    .brand-logo {
-      width: 56px; height: 56px; padding: 8px;
-      background: var(--glass); border-radius: 10px; display: grid; place-items: center;
-    }
-    .brand-logo img { width: 100%; object-fit: contain; }
-    .btn-plain {
-      background: none; border: 0; color: var(--muted); border-radius: 8px;
-      padding: 8px; cursor: pointer; transition: 0.2s;
-    }
-    .btn-plain:hover { color: var(--brand-accent); transform: translateY(-1px); }
+  .progress{height:14px;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden;width:100%;}
+  .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%;transition:width .2s ease}
 
-    /* CARD */
-    .card {
-      background: var(--surface);
-      border: 1px solid rgba(255,255,255,0.03);
-      box-shadow: var(--shadow);
-      padding: 22px; border-radius: 14px;
-    }
-    .grid {
-      display: grid; grid-template-columns: 1fr 340px; gap: 20px;
-    }
+  pre.log{height:160px;overflow:auto;background:#061018;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);color:#bfefff;margin:12px 0 0;font-size:13px}
+  .small{font-size:13px;color:var(--muted)}
+  .muted{color:var(--muted)}
 
-    /* LEFT */
-    .install-wrap {
-      padding: 20px; border-radius: 12px;
-      background: var(--surface); border: 1px solid rgba(255,255,255,0.04);
-      display: flex; justify-content: center;
-    }
-    .selector { display: flex; gap: 10px; flex-wrap: wrap; }
-    .version-select {
-      padding: 10px 12px; border-radius: 10px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.03);
-      color: var(--text); font-weight: 600;
-    }
-    .apply-btn {
-      background: var(--brand-accent); color: #fff; border: 0;
-      padding: 10px 16px; border-radius: 10px; cursor: pointer;
-      font-weight: 700; box-shadow: 0 4px 14px rgba(46,160,255,0.18);
-    }
-
-    /* RIGHT */
-    .meta, .help {
-      background: var(--surface);
-      border-radius: 10px; padding: 12px;
-      border: 1px solid rgba(255,255,255,0.04);
-      font-size: 14px; color: var(--muted);
-    }
-    .help { background: transparent; border: none; }
-
-    footer { margin-top: 20px; color: var(--muted); font-size: 13px; }
-
-    @media (max-width: 880px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  /* responsive */
+  @media (max-width:720px){
+    .option{min-width:140px;padding:10px}
+    .row{flex-direction:column;align-items:stretch}
+    .actions{flex-direction:column}
+  }
+</style>
 </head>
-
 <body>
-  <div class="wrap">
-    <!-- HEADER -->
-    <header class="brand flex">
-      <div class="flex gap">
-        <div class="brand-logo">
-          <img src="assets/makersg-logo.png" alt="MakersG logo" />
-        </div>
-        <div>
-          <h1 style="margin:0;font-size:18px;color:var(--brand-strong)">MakersG</h1>
-          <p style="margin:0;font-size:13px;color:var(--muted)">ESP Firmware Manager — Nạp nhanh, an toàn</p>
-        </div>
-      </div>
-
-      <div class="flex gap">
-        <a class="btn-plain" target="_blank" href="https://github.com/quanphamwork/makersg.github.io">Repo</a>
-        <button id="themeToggle" class="btn-plain" aria-pressed="false">
-          <span id="themeIcon">🌙</span>
-        </button>
-      </div>
-    </header>
-
-    <!-- MAIN -->
+  <div class="container">
     <div class="card">
-      <div class="grid">
-        <!-- LEFT -->
-        <div>
-          <div class="selector">
-            <label style="color:var(--muted)">Phiên bản:</label>
-            <select id="versionSelect" class="version-select"></select>
-            <button id="applyBtn" class="apply-btn">Áp dụng</button>
-          </div>
+      <h1>Chọn Chương Trình (Miễn Phí)</h1>
+      <p class="lead">Chọn chương trình, chip, màn OLED → tải hoặc nạp trực tiếp qua USB (Web Serial).</p>
 
-          <div id="installerArea" class="install-wrap"></div>
-
-          <div class="meta" id="firmwareMeta"></div>
-        </div>
-
-        <!-- RIGHT -->
-        <div class="flex" style="flex-direction:column;gap:12px">
-          <div class="meta">
-            <strong>Hướng dẫn nhanh</strong>
-            <ul style="margin:8px 0 0 18px;">
-              <li>Kết nối ESP qua USB.</li>
-              <li>Chọn phiên bản → <b>Áp dụng</b> → "Install".</li>
-              <li>Firmware cần host HTTPS + CORS.</li>
-            </ul>
-          </div>
-
-          <div class="help">
-            <strong>Lưu ý kỹ thuật</strong>
-            <p style="margin:8px 0 0">
-              Tính SHA256 bằng: <code>shasum -a 256 firmware.bin</code>
-            </p>
-          </div>
-        </div>
+      <div id="programs" class="selector-row">
+        <!-- populated by JS -->
       </div>
 
-      <footer class="flex" style="justify-content:space-between">
-        <span>© MakersG — Dark mode first</span>
-        <a href="#" style="color:var(--muted)">Chính sách</a>
-      </footer>
+      <h2>Chọn Chip</h2>
+      <div id="chips" class="selector-row"></div>
+
+      <h2>Chọn Màn Hình OLED</h2>
+      <div id="oleds" class="selector-row"></div>
+
+      <div class="panel">
+        <div class="row">
+          <div>
+            <strong>Firmware:</strong>
+            <div id="fw-title" class="small muted">Chưa chọn</div>
+            <div id="fw-version" class="muted small"></div>
+          </div>
+
+          <div class="spacer"></div>
+
+          <div style="min-width:220px">
+            <div class="small muted">Trạng thái cổng Serial</div>
+            <div id="serial-status" class="small">Not connected</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="row">
+          <button id="install-btn" class="btn" disabled>Cài Đặt Ngay</button>
+          <button id="download-btn" class="btn secondary" disabled>Tải Firmware (.bin)</button>
+          <button id="connect-btn" class="btn secondary">Kết nối thiết bị</button>
+        </div>
+
+        <div style="margin-top:14px">
+          <div class="small muted">Progress</div>
+          <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+          <div class="small muted" style="margin-top:6px"><span id="progress-text">0%</span></div>
+        </div>
+
+        <div style="margin-top:12px" class="row">
+          <div style="flex:1">
+            <div class="small muted">Firmware metadata</div>
+            <div id="fw-meta" class="small">—</div>
+          </div>
+          <div style="width:220px">
+            <div class="small muted">Binary size</div>
+            <div id="fw-size" class="small">—</div>
+          </div>
+        </div>
+
+        <pre id="log" class="log">Log output...</pre>
+      </div>
+
+      <div class="small muted" style="margin-top:12px">Hướng dẫn nạp (tóm tắt): giữ nút BOOT → cắm cáp → Kết nối → Cài Đặt Ngay.</div>
     </div>
   </div>
 
-  <script>
-    /* ===========================
-       CONFIG FIRMWARE
-    ============================ */
-    const firmwares = [
-      {
-        label: "v1.2.0 — Stable",
-        url: "https://your-domain/esp-firmware-v1.2.0.bin",
-        version: "1.2.0",
-        board: "esp32",
-        sha256: "REPLACE_SHA256_120",
-        notes: "Sửa lỗi Wi-Fi, tăng ổn định",
-        offset: "0x1000"
-      },
-      {
-        label: "v1.1.0 — Beta",
-        url: "https://your-domain/esp-firmware-v1.1.0.bin",
-        version: "1.1.0",
-        board: "esp32",
-        sha256: "REPLACE_SHA256_110",
-        notes: "Tính năng thử nghiệm",
-        offset: "0x1000"
-      },
-      {
-        label: "v1.0.0 — Legacy",
-        url: "https://your-domain/esp-firmware-v1.0.0.bin",
-        version: "1.0.0",
-        board: "esp32",
-        sha256: "REPLACE_SHA256_100",
-        notes: "Phiên bản đầu tiên",
-        offset: "0x1000"
-      }
-    ];
+<script>
+/*
+  Simple Firmware Flasher UI + minimal Web Serial uploader.
+  - Replace MANIFEST_MAP with your real manifest mapping (or endpoint).
+  - For production ESP32 flashing, integrate esptool.js or implement ESP32 bootloader protocol.
+  - This uploader sends the raw binary over Serial in chunks; device must run a compatible receiver firmware
+    (e.g. a small bootloader that accepts binary chunks and writes to flash). Use this as a dev skeleton.
+*/
 
-    /* ===========================
-       DOM
-    ============================ */
-    const selectEl = document.getElementById("versionSelect");
-    const installerArea = document.getElementById("installerArea");
-    const firmwareMeta = document.getElementById("firmwareMeta");
-    const applyBtn = document.getElementById("applyBtn");
+// ---------- CONFIG: replace with your real manifests ----------
+const MANIFEST_MAP = {
+  // key formed by program + chip + oled to choose correct binary/metadata
+  // Example:
+  // "ChatBotAI|ESP32-S3-M16R8|OLED-1.3": { version: "...", url: "https://cdn.example.com/chatbotai_esp32s3_1.3.bin", size: 1456784, sha256: "..." }
+};
 
-    let manifestUrl = null;
+// Example demo entries (for local testing)
+MANIFEST_MAP["ChatBotAI|ESP32-S3-M16R8|OLED-1.3"] = {
+  version: "1.3.0",
+  url: "https://github.com/esp8266/Arduino/raw/master/doc/_static/logo.png", // demo small file; replace with actual .bin
+  // Note: the demo URL is a PNG; used here just to test download in browser for skeleton
+  size: null,
+  sha256: null,
+  notes: "Demo firmware (replace with real .bin)."
+};
 
-    /* ===========================
-       INIT SELECT
-    ============================ */
-    firmwares.forEach((fw, i) => {
-      const opt = document.createElement("option");
-      opt.value = i;
-      opt.textContent = fw.label;
-      selectEl.appendChild(opt);
+// ---------- UI state ----------
+const programs = [
+  { id: 'mochinav', name:'MochiNav (Có phí)', desc:'Navigation module', paid:true },
+  { id: 'chatbot', name:'ChatBot AI (Miễn phí)', desc:'AI assistant', paid:false }
+];
+const chips = [
+  { id:'ESP32-S3-M16R8', label:'ESP32-S3 M16R8 / ESP32-S3 Mạch Tìm - Hi, Lily' },
+  { id:'ESP32-S3-Super', label:'ESP32-S3 Super Mini - Hi, Lily' },
+  { id:'ESP32-S3-Zero', label:'ESP32-S3 Zero - Hi, Lily' }
+];
+const oleds = [
+  { id:'OLED-0.91', label:'OLED 0.91inch' },
+  { id:'OLED-0.96', label:'OLED 0.96inch' },
+  { id:'OLED-1.3', label:'OLED 1.3inch' }
+];
+
+let state = {
+  program: null,
+  chip: null,
+  oled: null,
+  manifest: null,
+  binBuffer: null,
+  port: null,
+  writer: null
+};
+
+// ---------- DOM ----------
+const programsEl = document.getElementById('programs');
+const chipsEl = document.getElementById('chips');
+const oledsEl = document.getElementById('oleds');
+
+const fwTitle = document.getElementById('fw-title');
+const fwVersion = document.getElementById('fw-version');
+const fwMeta = document.getElementById('fw-meta');
+const fwSize = document.getElementById('fw-size');
+const installBtn = document.getElementById('install-btn');
+const downloadBtn = document.getElementById('download-btn');
+const connectBtn = document.getElementById('connect-btn');
+const serialStatus = document.getElementById('serial-status');
+const progressBar = document.getElementById('progress-bar');
+const progressText = document.getElementById('progress-text');
+const logPre = document.getElementById('log');
+
+function log(...args){
+  const t = new Date().toLocaleTimeString();
+  logPre.textContent += `\n[${t}] ${args.join(' ')}`;
+  logPre.scrollTop = logPre.scrollHeight;
+}
+
+// ---------- render selectors ----------
+function makeOption(item, group, clickFn){
+  const div = document.createElement('div');
+  div.className = 'option';
+  div.tabIndex = 0;
+  div.innerHTML = `<div class="title">${item.name||item.label}</div><div class="meta">${item.desc||''}</div>`;
+  div.addEventListener('click', () => clickFn(item, div));
+  div.addEventListener('keydown', (e)=>{ if(e.key==='Enter') clickFn(item,div) });
+  return div;
+}
+
+function render(){
+  programsEl.innerHTML = '';
+  for(const p of programs){
+    const el = makeOption(p, 'programs', (it,el)=>{
+      state.program = it.id;
+      Array.from(programsEl.children).forEach(c=>c.classList.remove('selected'));
+      el.classList.add('selected');
+      onSelectionChanged();
     });
+    programsEl.appendChild(el);
+  }
 
-    /* ===========================
-       CREATE MANIFEST
-    ============================ */
-    function createManifest(fw) {
-      const data = {
-        name: "MakersG Firmware",
-        version: fw.version,
-        description: fw.notes,
-        firmwares: [{
-          url: fw.url,
-          board: fw.board,
-          version: fw.version,
-          sha256: fw.sha256,
-          offset: fw.offset
-        }]
-      };
+  chipsEl.innerHTML = '';
+  for(const c of chips){
+    const el = makeOption(c, 'chips', (it,el)=>{
+      state.chip = it.id;
+      Array.from(chipsEl.children).forEach(cc=>cc.classList.remove('selected'));
+      el.classList.add('selected');
+      onSelectionChanged();
+    });
+    chipsEl.appendChild(el);
+  }
 
-      if (manifestUrl) URL.revokeObjectURL(manifestUrl);
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-      manifestUrl = URL.createObjectURL(blob);
-      return manifestUrl;
+  oledsEl.innerHTML = '';
+  for(const o of oleds){
+    const el = makeOption(o, 'oleds', (it,el)=>{
+      state.oled = it.id;
+      Array.from(oledsEl.children).forEach(cc=>cc.classList.remove('selected'));
+      el.classList.add('selected');
+      onSelectionChanged();
+    });
+    oledsEl.appendChild(el);
+  }
+
+  // default select ChatBot AI and first chip + oled for demo
+  const defaultProg = Array.from(programsEl.children)[1];
+  if(defaultProg){ defaultProg.click(); }
+  const defaultChip = Array.from(chipsEl.children)[0];
+  if(defaultChip){ defaultChip.click(); }
+  const defaultOled = Array.from(oledsEl.children)[2];
+  if(defaultOled){ defaultOled.click(); }
+}
+render();
+
+// ---------- selection change handler ----------
+async function onSelectionChanged(){
+  // find manifest key
+  if(!state.program || !state.chip || !state.oled){ updateUIForNoManifest(); return; }
+  const key = `${state.program==='chatbot' ? 'ChatBotAI' : 'MochiNav'}|${state.chip}|${state.oled}`;
+  log('Selected key:', key);
+  if(MANIFEST_MAP[key]){
+    const manifest = MANIFEST_MAP[key];
+    state.manifest = manifest;
+    fwTitle.textContent = `${state.program==='chatbot' ? 'ChatBot AI' : 'MochiNav'} — ${state.chip}`;
+    fwVersion.textContent = `Version: ${manifest.version || '—'}`;
+    fwMeta.textContent = manifest.notes || '—';
+    fwSize.textContent = manifest.size ? humanSize(manifest.size) : '—';
+    downloadBtn.disabled = false;
+    installBtn.disabled = false;
+    // optionally compute sha256 by fetching file headers or fetching whole file
+    if(!manifest.sha256){
+      fwMeta.textContent += ' (sha256 unknown)';
     }
+  }else{
+    updateUIForNoManifest();
+  }
+}
+function updateUIForNoManifest(){
+  state.manifest = null;
+  fwTitle.textContent = 'Chưa có firmware tương ứng';
+  fwVersion.textContent = '';
+  fwMeta.textContent = 'Không tìm thấy firmware cho cấu hình đã chọn. Hãy upload manifest hoặc cấu hình mapping.';
+  fwSize.textContent = '—';
+  downloadBtn.disabled = true;
+  installBtn.disabled = true;
+}
 
-    /* ===========================
-       APPLY SELECTION
-    ============================ */
-    function applySelection() {
-      const fw = firmwares[selectEl.value];
-      const url = createManifest(fw);
+// ---------- helper ----------
+function humanSize(bytes){
+  if(!bytes) return '—';
+  const units = ['B','KB','MB','GB'];
+  let i=0; let v=bytes;
+  while(v>=1024 && i<units.length-1){ v/=1024; i++; }
+  return `${v.toFixed(2)} ${units[i]}`;
+}
 
-      installerArea.innerHTML = "";
-      const el = document.createElement("esp-web-install-button");
-      el.setAttribute("manifest", url);
-      installerArea.appendChild(el);
+// ---------- download firmware ----------
+downloadBtn.addEventListener('click', async ()=>{
+  if(!state.manifest || !state.manifest.url){ alert('Không có firmware URL'); return; }
+  try{
+    downloadBtn.disabled=true;
+    log('Downloading', state.manifest.url);
+    const resp = await fetch(state.manifest.url);
+    if(!resp.ok) throw new Error('Fetch failed: '+resp.status);
+    const blob = await resp.blob();
+    const fname = (state.manifest.filename || `firmware-${Date.now()}.bin`);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a); a.click();
+    a.remove();
+    log('Downloaded', blob.size, 'bytes');
+    fwSize.textContent = humanSize(blob.size);
+    // compute sha256 in browser
+    const arrayBuffer = await blob.arrayBuffer();
+    const hashHex = await sha256Hex(arrayBuffer);
+    log('SHA256:', hashHex);
+  }catch(err){
+    log('Download error', err.message);
+    alert('Lỗi khi tải firmware: '+err.message);
+  } finally{
+    downloadBtn.disabled=false;
+  }
+});
 
-      firmwareMeta.innerHTML =
-        `<b>${fw.label}</b><br/><small>${fw.notes}</small><br/>SHA256: ${fw.sha256.slice(0,12)}…`;
+// ---------- Web Serial: connect / disconnect ----------
+connectBtn.addEventListener('click', async ()=>{
+  if(state.port){
+    await disconnectPort();
+    return;
+  }
+  try{
+    const filters = []; // optional: vendor/product filters
+    log('Requesting serial port...');
+    const port = await navigator.serial.requestPort({ filters });
+    await port.open({ baudRate: 115200 }); // adjust as necessary
+    state.port = port;
+    serialStatus.textContent = 'Connected';
+    connectBtn.textContent = 'Disconnect';
+    log('Serial port opened');
+    // prepare writer for sending raw data
+    const encoder = new TextEncoderStream();
+    const writableStreamClosed = encoder.readable.pipeTo(port.writable);
+    state.writer = encoder.writable.getWriter();
+    // start read loop to show device logs
+    readFromPort(port);
+  }catch(err){
+    log('Serial connect error:', err.message || err);
+    alert('Không thể mở cổng Serial: '+(err.message||err));
+  }
+});
+
+async function disconnectPort(){
+  if(!state.port) return;
+  try{
+    if(state.writer){ await state.writer.close(); state.writer = null; }
+    await state.port.close();
+    log('Serial port closed');
+  }catch(e){ log('Error closing port', e.message); }
+  state.port = null;
+  serialStatus.textContent = 'Not connected';
+  connectBtn.textContent = 'Kết nối thiết bị';
+}
+
+// simple reader: show incoming device text (assumes UTF-8)
+async function readFromPort(port){
+  try{
+    const decoder = new TextDecoderStream();
+    const readableStreamClosed = port.readable.pipeTo(decoder.writable);
+    const reader = decoder.readable.getReader();
+    while(true){
+      const { value, done } = await reader.read();
+      if(done) break;
+      if(value) log('[Device]', value.trim());
     }
+    reader.releaseLock();
+  }catch(err){
+    log('Read loop ended', err && err.message);
+  }
+}
 
-    applyBtn.onclick = applySelection;
-    applySelection();
+// ---------- Install (flash) ----------
+installBtn.addEventListener('click', async ()=>{
+  if(!state.manifest || !state.manifest.url){ alert('No manifest'); return; }
+  if(!state.port){ alert('Please connect device via Web Serial first'); return; }
 
-    /* ===========================
-       THEME TOGGLE
-    ============================ */
-    const toggle = document.getElementById("themeToggle");
-    const icon = document.getElementById("themeIcon");
-    const html = document.documentElement;
+  const confirmed = confirm('Bạn có chắc muốn nạp firmware lên thiết bị? Hãy đảm bảo bạn đã giữ nút BOOT (nếu yêu cầu) và chọn đúng chip.');
+  if(!confirmed) return;
 
-    function setTheme(dark) {
-      html.dataset.theme = dark ? "" : "light";
-      icon.textContent = dark ? "☀️" : "🌙";
-      toggle.ariaPressed = dark;
-      localStorage.setItem("theme", dark ? "dark" : "light");
+  try{
+    installBtn.disabled = true;
+    connectBtn.disabled = true;
+    downloadBtn.disabled = true;
+    log('Starting flash process...');
+    // fetch binary into ArrayBuffer with streaming + progress
+    const response = await fetch(state.manifest.url);
+    if(!response.ok) throw new Error('Fetch failed: '+response.status);
+    const contentLength = response.headers.get('Content-Length');
+    const total = contentLength ? Number(contentLength) : null;
+    let loaded = 0;
+    const reader = response.body.getReader();
+    const chunks = [];
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value);
+      loaded += value.length;
+      updateProgress(total? Math.round(loaded/total*100):null, loaded, total);
     }
+    const full = concatUint8Arrays(chunks);
+    state.binBuffer = full;
+    log('Binary downloaded, bytes:', full.byteLength);
+    fwSize.textContent = humanSize(full.byteLength);
+    const hash = await sha256Hex(full.buffer);
+    log('SHA256 computed:', hash);
 
-    const saved = localStorage.getItem("theme");
-    const darkStart = saved === "dark" || (!saved && matchMedia("(prefers-color-scheme: dark)").matches);
-    setTheme(darkStart);
+    // send to device in chunks
+    await sendBinaryOverSerial(full);
+    log('Flash finished (uploader returned). Waiting device verify...');
+    // update UI
+    updateProgress(100, full.byteLength, full.byteLength);
+  }catch(err){
+    log('Flash error', err.message || err);
+    alert('Lỗi khi nạp: '+(err.message || err));
+  } finally{
+    installBtn.disabled = false;
+    connectBtn.disabled = false;
+    downloadBtn.disabled = false;
+  }
+});
 
-    toggle.onclick = () => setTheme(html.dataset.theme === "light");
-  </script>
+// naive send: sends raw bytes in chunks to device; device must implement receiver
+async function sendBinaryOverSerial(u8arr){
+  if(!state.port) throw new Error('No serial port');
+  // writer approach: write binary via port.writable directly using native WritableStream
+  // Some browsers allow port.writable.getWriter(); but earlier we used TextEncoderStream.
+  // To send binary, open a fresh writer on port.writable (binary)
+  const writer = state.port.writable.getWriter();
+  const CHUNK = 1024 * 16; // 16KB chunks
+  try{
+    for(let offset=0; offset<u8arr.length; offset+=CHUNK){
+      const slice = u8arr.slice(offset, Math.min(offset+CHUNK, u8arr.length));
+      await writer.write(slice);
+      const pct = Math.round((offset + slice.length) / u8arr.length * 100);
+      updateProgress(pct, offset + slice.length, u8arr.length);
+      // small delay to avoid saturating device buffer
+      await sleep(10);
+    }
+    log('All chunks written to serial writer');
+  }catch(err){
+    throw err;
+  } finally{
+    await writer.releaseLock();
+  }
+}
+
+// ---------- utils ----------
+async function sha256Hex(buffer){
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function concatUint8Arrays(chunks){
+  let total=0;
+  for(const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let offset=0;
+  for(const c of chunks){
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+function sleep(ms){ return new Promise(res=>setTimeout(res, ms)); }
+function updateProgress(pct, loaded, total){
+  if(pct===null){
+    progressBar.style.width = '0%';
+    progressText.textContent = `${humanSize(loaded)} / ${total?humanSize(total):'—'}`;
+  }else{
+    progressBar.style.width = `${pct}%`;
+    progressText.textContent = `${pct}% • ${humanSize(loaded)} / ${total?humanSize(total):'—'}`;
+  }
+}
+
+// ---------- feature: auto select manifest for demo  ----------
+/* For demo environments, allow pressing "Demo load manifest" by double-clicking the fw title */
+fwTitle.addEventListener('dblclick', async ()=>{
+  // pick manifest mapped to current selection if present
+  const key = `${state.program==='chatbot' ? 'ChatBotAI' : 'MochiNav'}|${state.chip}|${state.oled}`;
+  if(MANIFEST_MAP[key]){
+    state.manifest = MANIFEST_MAP[key];
+    fwTitle.textContent = `${state.program==='chatbot' ? 'ChatBot AI' : 'MochiNav'} — ${state.chip}`;
+    fwVersion.textContent = `Version: ${state.manifest.version || '—'}`;
+    fwMeta.textContent = state.manifest.notes || '—';
+    log('Manifest loaded from demo map');
+    downloadBtn.disabled = false;
+    installBtn.disabled = false;
+  } else {
+    log('No manifest for key', key);
+  }
+});
+
+// ---------- feature: before unload, close port ----------
+window.addEventListener('beforeunload', async (e)=>{
+  if(state.port){
+    try{ await state.port.close(); } catch(e){}
+  }
+});
+</script>
 </body>
 </html>
