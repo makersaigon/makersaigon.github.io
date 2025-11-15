@@ -1,97 +1,143 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>makerSG</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MakerSG – ESP32 Flasher</title>
+
+  <!-- TailwindCSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Custom override -->
   <style>
-    .logo-box{display:flex;align-items:center;gap:1rem;margin-bottom:2rem;justify-content:center;}
-    .logo-box img{width:70px;height:70px;object-fit:contain;}
-    .logo-title{font-size:2rem;font-weight:700;}
-    .logo-sub{font-size:0.9rem;color:var(--muted-fg);}
+    .card {
+      @apply bg-white border border-gray-200 rounded-xl p-5 shadow-sm transition;
+    }
+    .card-clickable { cursor: pointer; }
+    .card-clickable:hover { @apply border-gray-400 shadow-md; }
+    .card-selected {
+      @apply border-black shadow-lg bg-gray-50;
+    }
+    .logs-area {
+      font-family: "Courier New", monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
-<body>
-  <header class="hero">
-    <div class="container">
-      <div class="logo-box">
-        <img src="/assets/logo.png" alt="MakerSG Logo" />
-        <div>
-          <div class="logo-title">MakerSG</div>
-          <div class="logo-sub">Workshop</div>
-        </div>
+
+<body class="bg-gray-100 text-gray-900">
+
+  <!-- HEADER -->
+  <header class="bg-white border-b border-gray-200 py-6">
+    <div class="max-w-6xl mx-auto flex items-center gap-4 px-4">
+      <img src="/assets/logo.png" class="h-14 w-14 object-contain" />
+      <div>
+        <div class="text-3xl font-bold">MakerSG</div>
+        <div class="text-gray-500 text-sm">ESP32 Workshop Flasher</div>
+      </div>
+    </div>
   </header>
 
-  <main class="container main-content">
-    <div class="grid">
-      <div class="content-area">
+  <main class="max-w-6xl mx-auto px-4 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-        <section class="section">
-          <h2 class="section-title"><span class="text-primary">01.</span> Chọn Chương Trình</h2>
-          <div id="programs" class="grid-2"></div>
-        </section>
+    <!-- LEFT SIDE -->
+    <div class="lg:col-span-2 flex flex-col gap-8">
 
-        <section class="section">
-          <h2 class="section-title"><span class="text-primary">02.</span> Chọn Module</h2>
-          <div id="chips" class="grid-3"></div>
-        </section>
+      <!-- Program -->
+      <div class="card">
+        <h2 class="text-xl font-bold mb-4">01. Chọn Chương Trình</h2>
+        <div id="programs" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
 
-        <section class="section">
-          <h2 class="section-title"><span class="text-primary">03.</span> Chọn Màn Hình</h2>
-          <div id="oleds" class="grid-3"></div>
-        </section>
+      <!-- Chip -->
+      <div class="card">
+        <h2 class="text-xl font-bold mb-4">02. Chọn Module</h2>
+        <div id="chips" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+      </div>
 
-        <div class="card action-card">
-          <div class="action-buttons">
-            <button id="connect-btn" class="btn btn-outline">Kết nối</button>
-            <button id="download-btn" class="btn btn-outline" disabled>Tải .bin</button>
-            <button id="install-btn" class="btn btn-primary" disabled>
-              <span id="installBtnText">Cài Đặt Ngay</span>
-              <div id="installProgress" class="install-progress"></div>
-            </button>
+      <!-- OLED -->
+      <div class="card">
+        <h2 class="text-xl font-bold mb-4">03. Chọn Màn Hình</h2>
+        <div id="oleds" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- ACTION BUTTONS -->
+      <div class="card">
+        <div class="flex flex-col sm:flex-row gap-4">
+          <button id="connect-btn"
+            class="flex-1 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-100 font-medium">
+            Kết nối
+          </button>
+
+          <button id="download-btn" disabled
+            class="flex-1 py-3 rounded-lg border border-gray-300 bg-white text-gray-500 disabled:opacity-50">
+            Tải .bin
+          </button>
+
+          <button id="install-btn" disabled
+            class="flex-1 py-3 rounded-lg bg-black text-white hover:bg-gray-800 font-semibold disabled:opacity-50 relative overflow-hidden">
+            <span id="installBtnText">Cài Đặt Ngay</span>
+            <div id="installProgress" class="absolute inset-0 bg-gray-300 w-0"></div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDE -->
+    <div class="flex flex-col gap-8">
+
+      <!-- STATUS -->
+      <div class="card">
+        <h3 class="text-lg font-bold mb-4">Trạng thái thiết bị</h3>
+
+        <div class="flex justify-between py-2 border-b border-gray-200">
+          <span class="text-gray-600">COM Port</span>
+          <span id="serial-status" class="text-gray-500">Chưa kết nối</span>
+        </div>
+
+        <!-- Progress -->
+        <div class="mt-4">
+          <div class="flex justify-between text-sm mb-1 text-gray-500">
+            <span>Tiến độ</span>
+            <span id="progress-text">0%</span>
           </div>
+          <div class="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+            <div id="progress-bar" class="h-full bg-black w-0 transition-all"></div>
+          </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="mt-4">
+          <div class="text-sm text-gray-500 mb-1">Logs</div>
+          <pre id="log" class="logs-area bg-gray-50 border border-gray-200 rounded-lg p-3 h-48 overflow-auto">Chờ hành động...</pre>
         </div>
 
       </div>
 
-      <div class="sidebar">
-        <div class="card">
-          <div class="card-header-inline"><h3 class="card-title">Trạng Thái</h3></div>
-          <div class="status-item">
-            <div class="status-label"><span>COM Port</span></div>
-            <span id="serial-status" class="text-muted">Chưa kết nối</span>
-          </div>
+      <!-- Firmware Info -->
+      <div class="card">
+        <h3 class="text-lg font-bold mb-4">Thông tin firmware</h3>
 
-          <div class="progress-container">
-            <div class="progress-header">
-              <span class="text-muted">Tiến độ</span>
-              <span id="progress-text">0%</span>
-            </div>
-            <div class="progress-bar"><div id="progress-bar" class="progress-fill"></div></div>
-          </div>
-
-          <div class="logs-container"><pre id="log" class="logs-empty">Chờ hành động...</pre></div>
+        <div class="flex justify-between py-1">
+          <span>Version</span><span id="fw-version">—</span>
         </div>
-
-        <div id="firmwareInfo" class="card" style="margin-top:1rem;">
-          <div class="card-header-inline"><h3 class="card-title">Firmware</h3></div>
-          <div class="info-grid">
-            <div class="info-item"><span>Version</span><span id="fw-version">—</span></div>
-            <div class="info-item"><span>Size</span><span id="fw-size">—</span></div>
-            <div class="info-item"><span>SHA256</span><span id="fw-sha">—</span></div>
-          </div>
+        <div class="flex justify-between py-1">
+          <span>Kích thước</span><span id="fw-size">—</span>
+        </div>
+        <div class="flex justify-between py-1">
+          <span>SHA256</span><span id="fw-sha">—</span>
         </div>
       </div>
+
     </div>
   </main>
 
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-bottom">Made with 💙 by MakerSG</div>
-    </div>
+  <footer class="py-6 text-center text-gray-500 text-sm">
+    Made with 💙 by MakerSG
   </footer>
 
+  <!-- Scripts -->
   <script src="https://unpkg.com/esptool-js@latest/bundle.js"></script>
   <script src="script.js"></script>
 </body>
