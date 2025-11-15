@@ -4,26 +4,30 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>MakerSG — ESP32 Firmware Installer</title>
-  <meta name="description" content="makersg - ESP32 Web Installer" />
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .logo-box{display:flex;align-items:center;gap:1rem;margin-bottom:2rem;justify-content:center;}
+    .logo-box img{width:70px;height:70px;object-fit:contain;}
+    .logo-title{font-size:2rem;font-weight:700;}
+    .logo-sub{font-size:0.9rem;color:var(--muted-fg);}
+  </style>
 </head>
 <body>
-  <!-- Hero -->
   <header class="hero">
     <div class="container">
-      <div style="margin-bottom: 2rem;">
-        <div style="display:inline-flex;align-items:center;gap:1rem;">
-          <div style="width:60px;height:60px;background:var(--primary);border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.5rem;color:var(--primary-fg);">MS</div>
-          <div style="text-align:left;">
-            <div style="font-size:1.75rem;font-weight:bold;">MakerSG</div>
-            <div style="font-size:0.875rem;color:var(--muted-fg);">ESP32 Development Tools</div>
-          </div>
+      <div class="logo-box">
+        <img src="/assets/logo.png" alt="MakerSG Logo" />
+        <div>
+          <div class="logo-title">MakerSG</div>
+          <div class="logo-sub">ESP32 Developer Tools</div>
         </div>
       </div>
 
-      <div class="hero-badge"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect></svg><span>Web Serial Installer</span></div>
+      <div class="hero-badge">
+        <span>Web Serial Installer</span>
+      </div>
       <h1 class="hero-title">Nạp Firmware <span class="text-primary">ESP32-S3</span></h1>
-      <p class="hero-subtitle">Chọn chương trình • Chọn chip • Chọn OLED • Install</p>
+      <p class="hero-subtitle">Chọn cấu hình • Kết nối • Cài đặt</p>
     </div>
   </header>
 
@@ -31,112 +35,71 @@
     <div class="grid">
       <div class="content-area">
 
-        <!-- Programs (render target) -->
         <section class="section">
           <h2 class="section-title"><span class="text-primary">01.</span> Chọn Chương Trình</h2>
           <div id="programs" class="grid-2"></div>
         </section>
 
-        <!-- Chips -->
         <section class="section">
           <h2 class="section-title"><span class="text-primary">02.</span> Chọn Module</h2>
           <div id="chips" class="grid-3"></div>
         </section>
 
-        <!-- OLED -->
         <section class="section">
           <h2 class="section-title"><span class="text-primary">03.</span> Chọn Màn Hình</h2>
           <div id="oleds" class="grid-3"></div>
         </section>
 
-        <!-- Actions -->
         <div class="card action-card">
           <div class="action-buttons">
-            <button id="connect-btn" class="btn btn-outline">
-              Kết nối
-            </button>
-
-            <button id="download-btn" class="btn btn-outline" disabled>
-              Tải .bin
-            </button>
-
+            <button id="connect-btn" class="btn btn-outline">Kết nối</button>
+            <button id="download-btn" class="btn btn-outline" disabled>Tải .bin</button>
             <button id="install-btn" class="btn btn-primary" disabled>
               <span id="installBtnText">Cài Đặt Ngay</span>
-              <div id="installProgress" class="install-progress" style="width:0%"></div>
+              <div id="installProgress" class="install-progress"></div>
             </button>
-          </div>
-          <div style="margin-top:0.75rem;color:var(--muted-fg);font-size:0.875rem;">
-            <strong>Ghi chú:</strong> Trình duyệt yêu cầu <em>Web Serial API</em> (Chrome/Edge/Opera). Đảm bảo đã bật cổng cho trang.
           </div>
         </div>
 
       </div>
 
-      <!-- Sidebar -->
       <div class="sidebar">
         <div class="card">
-          <div class="card-header-inline">
-            <svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline></svg>
-            <h3 class="card-title">Trạng Thái</h3>
-          </div>
-
+          <div class="card-header-inline"><h3 class="card-title">Trạng Thái</h3></div>
           <div class="status-item">
-            <div class="status-label">
-              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="7" width="10" height="12" rx="1"></rect></svg>
-              <span>COM Port</span>
-            </div>
+            <div class="status-label"><span>COM Port</span></div>
             <span id="serial-status" class="text-muted">Chưa kết nối</span>
           </div>
 
-          <div id="progressContainer" class="progress-container" style="display:block;">
+          <div class="progress-container">
             <div class="progress-header">
               <span class="text-muted">Tiến độ</span>
               <span id="progress-text">0%</span>
             </div>
-            <div class="progress-bar">
-              <div id="progress-bar" class="progress-fill" style="width:0%"></div>
-            </div>
+            <div class="progress-bar"><div id="progress-bar" class="progress-fill"></div></div>
           </div>
 
-          <div class="logs-container">
-            <pre id="log" class="logs-empty">Chờ hành động...</pre>
-          </div>
+          <div class="logs-container"><pre id="log" class="logs-empty">Chờ hành động...</pre></div>
         </div>
 
-        <div id="firmwareInfo" class="card" style="display:block;margin-top:1rem;">
-          <div class="card-header-inline">
-            <h3 class="card-title">Firmware</h3>
-          </div>
+        <div id="firmwareInfo" class="card" style="margin-top:1rem;">
+          <div class="card-header-inline"><h3 class="card-title">Firmware</h3></div>
           <div class="info-grid">
-            <div class="info-item">
-              <div class="info-label"><span>Phiên bản</span></div>
-              <div id="fw-version" class="text-primary">—</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label"><span>Kích thước</span></div>
-              <div id="fw-size">—</div>
-            </div>
-            <div class="info-item">
-              <div class="info-label"><span>SHA256</span></div>
-              <div id="fw-sha">—</div>
-            </div>
+            <div class="info-item"><span>Version</span><span id="fw-version">—</span></div>
+            <div class="info-item"><span>Size</span><span id="fw-size">—</span></div>
+            <div class="info-item"><span>SHA256</span><span id="fw-sha">—</span></div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Guidelines omitted for brevity (keep original or reuse) -->
   </main>
 
   <footer class="footer">
     <div class="container">
-      <div class="footer-bottom">
-        <p>Made with 💙 by <span class="text-primary">MakerSG</span></p>
-      </div>
+      <div class="footer-bottom">Made with 💙 by MakerSG</div>
     </div>
   </footer>
 
-  <!-- esptool.js (optional) -->
   <script src="https://unpkg.com/esptool-js@latest/bundle.js"></script>
   <script src="script.js"></script>
 </body>
