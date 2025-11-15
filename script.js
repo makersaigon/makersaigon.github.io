@@ -1,26 +1,63 @@
-// script.js — MakerSG ESP32 Pro Flasher
-// Supports: manifest.json, esptool-js (if available), Web Serial auto-boot via setSignals
-// Fallback: raw stream (requires device-side minimal receiver)
-// Author: ChatGPT (as Embedded Firmware Expert helper for MakerSG)
+// script.js — MakerSG ESP32 Pro Flasher (compat: read existing DOM options OR render defaults)
+// Paste this to replace current script.js
 
-const MANIFEST_URL = './manifest.json'; // change to your API endpoint or CDN
-const CHUNK_SIZE = 16 * 1024; // 16KB chunks for streaming
-const AUTO_BOOT_SIGNALS = true; // toggle RTS/DTR toggling to try entering bootloader
+const MANIFEST_URL = './manifest.json';
+const CHUNK_SIZE = 16 * 1024;
+const AUTO_BOOT_SIGNALS = true;
 
-// UI refs
-const $programs = document.getElementById('programs');
-const $chips = document.getElementById('chips');
-const $oleds = document.getElementById('oleds');
-const $connectBtn = document.getElementById('connect-btn');
-const $installBtn = document.getElementById('install-btn');
-const $downloadBtn = document.getElementById('download-btn');
-const $serialStatus = document.getElementById('serial-status');
-const $progressBar = document.getElementById('progress-bar');
-const $progressText = document.getElementById('progress-text');
-const $log = document.getElementById('log');
-const $fwVersion = document.getElementById('fw-version');
-const $fwSize = document.getElementById('fw-size');
-const $fwSha = document.getElementById('fw-sha');
+// UI refs (guarding for missing IDs)
+function requireId(id){ return document.getElementById(id); }
+const $programs = requireId('programs');
+const $chips = requireId('chips');
+const $oleds = requireId('oleds');
+const $connectBtn = requireId('connect-btn');
+let $installBtn = requireId('install-btn');
+const $downloadBtn = requireId('download-btn');
+const $serialStatus = requireId('serial-status');
+const $progressBar = requireId('progress-bar');
+const $progressText = requireId('progress-text');
+const $log = requireId('log');
+const $fwVersion = requireId('fw-version');
+const $fwSize = requireId('fw-size');
+const $fwSha = requireId('fw-sha');
+
+function safeLog(...args){
+  if($log){
+    const t = new Date().toLocaleTimeString();
+    $log.classList.remove('logs-empty');
+    $log.textContent += `\n[${t}] ${args.join(' ')}`;
+    $log.scrollTop = $log.scrollHeight;
+  } else {
+    console.log(...args);
+  }
+}
+
+function humanSize(bytes){
+  if(!bytes) return '—';
+  const units = ['B','KB','MB','GB'];
+  let i=0; let v=bytes;
+  while(v>=1024 && i<units.length-1){ v/=1024; i++; }
+  return `${v.toFixed(2)} ${units[i]}`;
+}
+
+async function sha256Hex(buffer){
+  const hash = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function updateProgress(pct, loaded, total){
+  if($progressBar && $progressText){
+    if(pct === null){
+      $progressBar.style.width = '0%';
+      $progressText.textContent = `${humanSize(loaded)} / ${total?humanSize(total):'—'}`;
+    } else {
+      $progressBar.style.width = `${pct}%`;
+      $progressText.textContent = `${pct}% • ${humanSize(loaded)} / ${total?humanSize(total):'—'}`;
+    }
+  }
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
 let manifestMap = null;
 let state = {
@@ -34,157 +71,152 @@ let state = {
   esploader: null
 };
 
-// sample local option lists (you can generate these from manifest too)
-const programs = [
-  { id: 'mochinav', label: 'MochiNav (Paid)', meta: 'Navigation module' },
-  { id: 'chatbot', label: 'ChatBot AI (Free)', meta: 'AI assistant' }
+// Default lists (used if DOM options not present)
+const defaultPrograms = [
+  { id: 'mochinav', label: 'MochiNav', meta: 'Navigation module' },
+  { id: 'chatbot', label: 'ChatBot AI', meta: 'AI assistant' }
 ];
-const chips = [
+const defaultChips = [
   { id: 'ESP32-S3-M16R8', label: 'ESP32-S3 M16R8' },
   { id: 'ESP32-S3-SUPER', label: 'ESP32-S3 Super' },
   { id: 'ESP32-S3-ZERO', label: 'ESP32-S3 Zero' }
 ];
-const oleds = [
+const defaultOleds = [
   { id: 'OLED-0.91', label: 'OLED 0.91"' },
   { id: 'OLED-0.96', label: 'OLED 0.96"' },
   { id: 'OLED-1.3', label: 'OLED 1.3"' }
 ];
 
-function log(...args){
-  const t = new Date().toLocaleTimeString();
-  $log.classList.remove('logs-empty');
-  $log.textContent += `\n[${t}] ${args.join(' ')}`;
-  $log.scrollTop = $log.scrollHeight;
-}
-
-function humanSize(bytes){
-  if(!bytes) return '—';
-  const units = ['B','KB','MB','GB'];
-  let i=0; let v = bytes;
-  while(v >= 1024 && i < units.length-1){ v/=1024; i++; }
-  return `${v.toFixed(2)} ${units[i]}`;
-}
-
-async function sha256Hex(buffer){
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
-
-function updateProgress(pct, loaded, total){
-  if(pct === null){
-    $progressBar.style.width = '0%';
-    $progressText.textContent = `${humanSize(loaded)} / ${total?humanSize(total):'—'}`;
-  } else {
-    $progressBar.style.width = `${pct}%`;
-    $progressText.textContent = `${pct}% • ${humanSize(loaded)} / ${total?humanSize(total):'—'}`;
-  }
-}
-
-// Render options to DOM
-function makeOption(item, group){
+// Utility to create card element (matches style)
+function createCard(item, group){
   const el = document.createElement('div');
   el.className = 'card card-clickable';
   el.tabIndex = 0;
-  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;"><div><strong>${item.label}</strong><div style="font-size:0.85rem;color:var(--muted-fg)">${item.meta||''}</div></div></div>`;
-  el.addEventListener('click', ()=> onOptionClick(item, el, group));
-  el.addEventListener('keydown', e=> { if(e.key === 'Enter') onOptionClick(item, el, group); });
+  el.dataset.optId = item.id;
+  el.dataset.optGroup = group;
+  el.innerHTML = `<div><strong>${item.label}</strong><div style="font-size:0.85rem;color:var(--muted-fg)">${item.meta||''}</div></div>`;
+  el.addEventListener('click', ()=> onOptionClick(item.id, group, el));
+  el.addEventListener('keydown', e => { if(e.key === 'Enter') onOptionClick(item.id, group, el); });
   return el;
 }
 
-function onOptionClick(item, el, group){
-  if(group === 'program'){ state.program = item.id; Array.from($programs.children).forEach(n=>n.classList.remove('card-selected')); el.classList.add('card-selected'); }
-  if(group === 'chip'){ state.chip = item.id; Array.from($chips.children).forEach(n=>n.classList.remove('card-selected')); el.classList.add('card-selected'); }
-  if(group === 'oled'){ state.oled = item.id; Array.from($oleds.children).forEach(n=>n.classList.remove('card-selected')); el.classList.add('card-selected'); }
+function onOptionClick(id, group, el){
+  if(group === 'program'){
+    state.program = id;
+    if($programs) Array.from($programs.children).forEach(n=>n.classList.remove('card-selected'));
+  }
+  if(group === 'chip'){
+    state.chip = id;
+    if($chips) Array.from($chips.children).forEach(n=>n.classList.remove('card-selected'));
+  }
+  if(group === 'oled'){
+    state.oled = id;
+    if($oleds) Array.from($oleds.children).forEach(n=>n.classList.remove('card-selected'));
+  }
+  if(el) el.classList.add('card-selected');
   onSelectionChanged();
 }
 
-function renderAll(){
-  $programs.innerHTML = ''; programs.forEach(p=> $programs.appendChild(makeOption(p,'program')));
-  $chips.innerHTML = ''; chips.forEach(c=> $chips.appendChild(makeOption(c,'chip')));
-  $oleds.innerHTML = ''; oleds.forEach(o=> $oleds.appendChild(makeOption(o,'oled')));
-
-  // default selects
-  if($programs.children[0]) $programs.children[0].click();
-  if($chips.children[0]) $chips.children[0].click();
-  if($oleds.children[0]) $oleds.children[0].click();
+// If index.html already contains cards with data-* attributes, read them
+function readExistingOptions(){
+  const programs = [];
+  const chips = [];
+  const oleds = [];
+  // find elements with data-program/data-chip/data-oled
+  document.querySelectorAll('[data-program]').forEach(n=>{
+    const id = n.dataset.program;
+    const label = (n.querySelector('.card-title') && n.querySelector('.card-title').textContent) || id;
+    programs.push({ id, label });
+  });
+  document.querySelectorAll('[data-chip]').forEach(n=>{
+    const id = n.dataset.chip;
+    const label = (n.querySelector('.card-title') && n.querySelector('.card-title').textContent) || id;
+    chips.push({ id, label });
+  });
+  document.querySelectorAll('[data-oled]').forEach(n=>{
+    const id = n.dataset.oled;
+    const label = (n.querySelector('.oled-size') && n.querySelector('.oled-size').textContent) || id;
+    oleds.push({ id, label });
+  });
+  return { programs, chips, oleds };
 }
 
-// load manifest.json (map)
+function renderOptions(){
+  // try reading existing DOM options first
+  const existing = readExistingOptions();
+  const progs = (existing.programs.length ? existing.programs : defaultPrograms);
+  const chps  = (existing.chips.length ? existing.chips : defaultChips);
+  const olds  = (existing.oleds.length ? existing.oleds : defaultOleds);
+
+  if($programs){ $programs.innerHTML = ''; progs.forEach(p=> $programs.appendChild(createCard(p,'program'))); }
+  if($chips){ $chips.innerHTML = ''; chps.forEach(c=> $chips.appendChild(createCard(c,'chip'))); }
+  if($oleds){ $oleds.innerHTML = ''; olds.forEach(o=> $oleds.appendChild(createCard(o,'oled'))); }
+
+  // default select first items if not already selected
+  if(!state.program && progs[0]) { state.program = progs[0].id; if($programs && $programs.children[0]) $programs.children[0].classList.add('card-selected'); }
+  if(!state.chip && chps[0]) { state.chip = chps[0].id; if($chips && $chips.children[0]) $chips.children[0].classList.add('card-selected'); }
+  if(!state.oled && olds[0]) { state.oled = olds[0].id; if($oleds && $oleds.children[0]) $oleds.children[0].classList.add('card-selected'); }
+
+  onSelectionChanged();
+}
+
 async function loadManifest(){
   try{
-    const res = await fetch(MANIFEST_URL + '?_=' + Date.now());
-    if(!res.ok) throw new Error('Manifest fetch ' + res.status);
-    manifestMap = await res.json();
-    log('Manifest loaded');
+    const r = await fetch(MANIFEST_URL + '?_=' + Date.now());
+    if(!r.ok) { safeLog('Manifest fetch failed', r.status); manifestMap = {}; return {}; }
+    manifestMap = await r.json();
+    safeLog('Manifest loaded');
     return manifestMap;
-  }catch(e){
-    log('Manifest load failed:', e.message);
-    // fallback: empty map
-    manifestMap = {};
-    return manifestMap;
-  }
+  }catch(e){ safeLog('Manifest load error', e.message); manifestMap = {}; return {}; }
 }
 
 async function onSelectionChanged(){
   if(!state.program || !state.chip || !state.oled) return;
-  // build key convention: Program|Chip|OLED
-  const progKey = state.program === 'chatbot' ? 'ChatBotAI' : 'MochiNav';
+  const progKey = state.program === 'chatbot' ? 'ChatBotAI' : (state.program === 'mochinav' ? 'MochiNav' : state.program);
   const key = `${progKey}|${state.chip}|${state.oled}`;
-  log('Selected', key);
+  safeLog('Selection:', key);
   if(!manifestMap) await loadManifest();
   const entry = manifestMap[key] || null;
   state.manifest = entry;
   if(entry){
-    $fwVersion.textContent = entry.version || '—';
-    $fwSize.textContent = entry.size ? humanSize(entry.size) : '—';
-    $fwSha.textContent = entry.sha256 || '—';
-    $downloadBtn.disabled = false;
-    $installBtn.disabled = false;
+    if($fwVersion) $fwVersion.textContent = entry.version || '—';
+    if($fwSize) $fwSize.textContent = entry.size ? humanSize(entry.size) : '—';
+    if($fwSha) $fwSha.textContent = entry.sha256 || '—';
+    if($downloadBtn) $downloadBtn.disabled = false;
+    if($installBtn) $installBtn.disabled = false;
   } else {
-    $fwVersion.textContent = 'Không có firmware';
-    $fwSize.textContent = '—';
-    $fwSha.textContent = '—';
-    $downloadBtn.disabled = true;
-    $installBtn.disabled = true;
+    if($fwVersion) $fwVersion.textContent = 'Không có firmware';
+    if($fwSize) $fwSize.textContent = '—';
+    if($fwSha) $fwSha.textContent = '—';
+    if($downloadBtn) $downloadBtn.disabled = true;
+    if($installBtn) $installBtn.disabled = true;
   }
 }
 
-// Connect / Disconnect serial
-$connectBtn.addEventListener('click', async ()=>{
-  if(state.port){
-    await disconnectSerial();
-    return;
-  }
-  if(!('serial' in navigator)){ alert('Web Serial API không được hỗ trợ. Dùng Chrome/Edge mới nhất.'); return; }
+// Serial connect/disconnect (simple, safe)
+async function connectSerial(){
+  if(state.port){ await disconnectSerial(); return; }
+  if(!('serial' in navigator)){ alert('Web Serial API không được hỗ trợ'); return; }
   try{
-    log('Requesting serial port...');
     const port = await navigator.serial.requestPort();
     await port.open({ baudRate: 115200 });
     state.port = port;
-    $serialStatus.textContent = 'Connected';
-    $connectBtn.textContent = 'Disconnect';
-    log('Serial opened');
-    // optional: set signals (DTR/RTS) to attempt auto-boot into bootloader
+    if($serialStatus) $serialStatus.textContent = 'Connected';
+    if($connectBtn) $connectBtn.textContent = 'Disconnect';
+    safeLog('Serial opened');
+    // optional auto-boot toggle (best-effort)
     if(AUTO_BOOT_SIGNALS && port.setSignals){
       try{
-        log('Toggling DTR/RTS to enter bootloader (if supported)...');
-        // Typical ESP enter bootloader sequence: toggle DTR/RTS combination.
-        // We'll attempt a safe sequence: set DTR=false, RTS=true -> wait -> DTR=true -> wait -> clear
         await port.setSignals({ dataTerminalReady: false, requestToSend: true });
         await sleep(80);
         await port.setSignals({ dataTerminalReady: true, requestToSend: false });
         await sleep(80);
-        await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-        await sleep(50);
-        log('Signal toggle done (may or may not enter bootloader depending on board).');
-      }catch(e){ log('Signal toggle failed:', e.message); }
+        safeLog('Attempted auto-boot toggle');
+      }catch(e){ safeLog('Auto-boot toggle not supported', e.message); }
     }
     startReadLoop(port);
-  }catch(e){
-    log('Serial open failed', e.message);
-    alert('Không thể mở cổng Serial: ' + e.message);
-  }
-});
+  }catch(e){ safeLog('Serial open failed', e.message); alert('Không thể mở cổng Serial: ' + e.message); }
+}
 
 async function disconnectSerial(){
   if(!state.port) return;
@@ -192,156 +224,120 @@ async function disconnectSerial(){
     if(state.reader){ await state.reader.cancel(); state.reader = null; }
     if(state.writer){ try{ await state.writer.close(); }catch(_){} state.writer = null; }
     await state.port.close();
-    log('Serial closed');
-  }catch(e){ log('Serial close error', e.message); }
+    safeLog('Serial closed');
+  }catch(e){ safeLog('Serial close error', e.message); }
   state.port = null;
-  $serialStatus.textContent = 'Not connected';
-  $connectBtn.textContent = 'Kết nối';
+  if($serialStatus) $serialStatus.textContent = 'Not connected';
+  if($connectBtn) $connectBtn.textContent = 'Kết nối';
 }
 
 async function startReadLoop(port){
   try{
-    const decoder = new TextDecoderStream();
-    const inputDone = port.readable.pipeTo(decoder.writable);
-    const inputStream = decoder.readable;
-    const reader = inputStream.getReader();
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable);
+    const reader = dec.readable.getReader();
     state.reader = reader;
     while(true){
       const { value, done } = await reader.read();
       if(done) break;
-      if(value) log('[Device]', value.trim());
+      if(value) safeLog('[Device]', value.trim());
     }
-  }catch(e){ log('Read loop ended', e.message); }
+  }catch(e){ safeLog('Read loop ended', e.message); }
 }
 
-// Download firmware (save to user device)
-$downloadBtn.addEventListener('click', async ()=>{
+// download and install handlers (concise fallback behavior)
+async function downloadHandler(){
   if(!state.manifest || !state.manifest.url) return alert('Không có URL firmware');
   try{
     $downloadBtn.disabled = true;
-    log('Downloading', state.manifest.url);
-    const res = await fetch(state.manifest.url);
-    if(!res.ok) throw new Error('Fetch failed: ' + res.status);
-    const blob = await res.blob();
+    safeLog('Downloading', state.manifest.url);
+    const r = await fetch(state.manifest.url);
+    if(!r.ok) throw new Error('Fetch failed: ' + r.status);
+    const blob = await r.blob();
     const fname = state.manifest.filename || `firmware-${Date.now()}.bin`;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    log('Downloaded', blob.size, 'bytes');
-    $fwSize.textContent = humanSize(blob.size);
+    document.body.appendChild(a); a.click(); a.remove();
+    safeLog('Downloaded', blob.size, 'bytes');
     const buf = await blob.arrayBuffer();
     const h = await sha256Hex(buf);
-    $fwSha.textContent = h;
-    log('SHA256', h);
-  }catch(e){ log('Download error', e.message); alert('Lỗi khi tải firmware: ' + e.message); }
+    safeLog('SHA256', h);
+    if($fwSize) $fwSize.textContent = humanSize(blob.size);
+    if($fwSha) $fwSha.textContent = h;
+  }catch(e){ safeLog('Download error', e.message); alert('Lỗi khi tải firmware: ' + e.message); }
   finally{ $downloadBtn.disabled = false; }
-});
+}
 
-// Install (flash) button
-$installBtn.addEventListener('click', async ()=>{
+async function installHandler(){
   if(!state.manifest || !state.manifest.url) return alert('Không có manifest');
   if(!state.port) return alert('Kết nối thiết bị trước khi nạp');
-  if(!confirm('Chắc chắn muốn nạp firmware? Hãy đảm bảo thiết bị ở chế độ boot nếu cần.')) return;
-
-  // disable UI
-  $installBtn.disabled = true; $downloadBtn.disabled = true; $connectBtn.disabled = true;
+  if(!confirm('Chắc chắn muốn nạp firmware?')) return;
+  $installBtn.disabled = true; if($downloadBtn) $downloadBtn.disabled = true; if($connectBtn) $connectBtn.disabled = true;
   try{
-    log('Fetching firmware...');
+    safeLog('Fetching firmware...');
     const resp = await fetch(state.manifest.url);
     if(!resp.ok) throw new Error('Fetch failed ' + resp.status);
     const total = resp.headers.get('Content-Length') ? Number(resp.headers.get('Content-Length')) : null;
-    let loaded = 0;
-    const reader = resp.body.getReader();
-    const chunks = [];
+    let loaded = 0, chunks = [];
+    const rdr = resp.body.getReader();
     while(true){
-      const { done, value } = await reader.read();
+      const { done, value } = await rdr.read();
       if(done) break;
-      chunks.push(value);
-      loaded += value.length;
+      chunks.push(value); loaded += value.length;
       updateProgress(total ? Math.round(loaded/total*100) : null, loaded, total);
     }
     const bin = concatChunks(chunks);
-    log('Firmware fetched', bin.length, 'bytes');
+    safeLog('Firmware ready', bin.length, 'bytes');
     const sha = await sha256Hex(bin.buffer);
-    log('SHA256', sha);
+    safeLog('SHA256', sha);
 
-    // If esptool-js available, use it (preferred)
+    // prefer esptool if available
     if(window.ESPLoader && window.ESPTransport){
       try{
-        log('esptool.js detected — using ESPLoader path.');
-        // Create transport from WebSerial port
+        safeLog('Using esptool.js path (if available).');
         const transport = new ESPTransport(state.port);
-        const esploader = new ESPLoader({ transport, baudrate: 115200, debug: (m)=>log('[esptool]', m) });
+        const esploader = new ESPLoader({ transport, baudrate: 115200, debug: (m)=>safeLog('[esptool]', m) });
         state.esploader = esploader;
-        log('Syncing with chip (esptool) — this may take a few seconds...');
-        await esploader.main(); // performs sync and chip detection
-        log('Detected chip:', esploader.chipName || 'unknown');
-        // Optional: erase flash first if entry requests
-        if(state.manifest.erase_before_write){
-          log('Erasing flash...');
-          await esploader.eraseFlash();
-          log('Erase complete.');
-        }
-        // Determine partitions from manifest (array of {address, url/filename/data})
+        await esploader.main();
+        safeLog('Chip:', esploader.chipName || 'unknown');
         if(state.manifest.parts && Array.isArray(state.manifest.parts)){
-          // write each part
           for(const part of state.manifest.parts){
             const addr = Number(part.address);
-            let data = null;
-            if(part.data_base64){
-              const raw = atob(part.data_base64);
-              const u8 = new Uint8Array(raw.length);
-              for(let i=0;i<raw.length;i++) u8[i] = raw.charCodeAt(i);
-              data = u8;
-            } else if(part.url){
-              log('Fetching part', part.url);
-              const r = await fetch(part.url);
-              const b = await r.arrayBuffer();
-              data = new Uint8Array(b);
-            } else {
-              throw new Error('Part has no data/url');
-            }
-            log(`Flashing part @ 0x${addr.toString(16)} size=${data.length}`);
+            let data;
+            if(part.url){ const r = await fetch(part.url); data = new Uint8Array(await r.arrayBuffer()); }
+            else if(part.data_base64){ const raw = atob(part.data_base64); data = new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) data[i]=raw.charCodeAt(i); }
+            else throw new Error('Part missing data/url');
+            safeLog(`Flashing part @ 0x${addr.toString(16)} size=${data.length}`);
             await esploader.flashData([{ address: addr, data }]);
-            log('Part flashed');
+            safeLog('Part flashed');
           }
         } else {
-          // simplest: write whole bin at address from manifest or 0x10000
           const addr = state.manifest.address ? Number(state.manifest.address) : 0x10000;
-          log(`Flashing binary @ 0x${addr.toString(16)} (length=${bin.length})`);
+          safeLog(`Flashing binary @ 0x${addr.toString(16)} (len=${bin.length})`);
           await esploader.flashData([{ address: addr, data: bin }]);
-          log('Flash complete (esptool path).');
+          safeLog('Flash complete (esptool).');
         }
         updateProgress(100, bin.length, bin.length);
-        log('Flashing finished. Reboot device if needed.');
-        // cleanup
-        try{ await esploader.transport.close(); } catch(_) {}
       }catch(e){
-        log('esptool flashing failed:', e.message);
-        // fallback to raw stream
-        log('Attempting fallback raw serial streaming...');
+        safeLog('esptool path failed:', e.message);
+        safeLog('Falling back to raw stream...');
         await fallbackRawStream(bin);
       }
     } else {
-      log('esptool.js not available — using fallback raw streaming (device must support it).');
+      safeLog('esptool.js not present; using fallback raw stream.');
       await fallbackRawStream(bin);
     }
-
   }catch(e){
-    log('Install failed:', e.message);
+    safeLog('Install failed:', e.message);
     alert('Lỗi khi nạp: ' + e.message);
   } finally {
-    $installBtn.disabled = false; $downloadBtn.disabled = false; $connectBtn.disabled = false;
+    $installBtn.disabled = false; if($downloadBtn) $downloadBtn.disabled = false; if($connectBtn) $connectBtn.disabled = false;
   }
-});
+}
 
-// fallbackRawStream: send raw binary chunks to device over Serial
 async function fallbackRawStream(u8){
   if(!state.port) throw new Error('No serial port');
-  // open writer
   const writer = state.port.writable.getWriter();
   state.writer = writer;
   try{
@@ -351,19 +347,14 @@ async function fallbackRawStream(u8){
       await writer.write(slice);
       const pct = Math.round((offset + slice.length) / total * 100);
       updateProgress(pct, offset + slice.length, total);
-      await sleep(20); // tiny pause to avoid overwhelming USB-Serial bridge
+      await sleep(20);
     }
-    log('All chunks written (raw stream). Waiting for device to finalize.');
+    safeLog('All chunks written (raw stream).');
     updateProgress(100, u8.length, u8.length);
-  }catch(e){
-    throw e;
-  }finally{
-    try{ await writer.releaseLock(); } catch(_) {}
-    state.writer = null;
-  }
+  }catch(e){ throw e; }
+  finally{ try{ await writer.releaseLock(); }catch(_){} state.writer = null; }
 }
 
-// helpers
 function concatChunks(chunks){
   let total = 0;
   for(const c of chunks) total += c.length;
@@ -372,11 +363,25 @@ function concatChunks(chunks){
   for(const c of chunks){ out.set(c, offset); offset += c.length; }
   return out;
 }
-function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 
-// init
+// Attach handlers safely (no double listeners)
+function attachHandlers(){
+  if($connectBtn) { $connectBtn.removeEventListener('click', connectSerial); $connectBtn.addEventListener('click', connectSerial); }
+  if($downloadBtn) { $downloadBtn.removeEventListener('click', downloadHandler); $downloadBtn.addEventListener('click', downloadHandler); }
+  if($installBtn) {
+    // replace node to clear previous listeners (robust)
+    const newBtn = $installBtn.cloneNode(true);
+    $installBtn.parentNode.replaceChild(newBtn, $installBtn);
+    $installBtn = newBtn;
+    $installBtn.addEventListener('click', installHandler);
+  }
+}
+
 (async function init(){
-  renderAll();
-  await loadManifest();
-  log('UI ready.');
+  try{
+    renderOptions();
+    attachHandlers();
+    await loadManifest();
+    safeLog('Init complete.');
+  }catch(e){ safeLog('Init error', e.message); }
 })();
