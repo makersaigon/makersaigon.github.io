@@ -1,0 +1,30 @@
+{
+  "ChatBotAI|ESP32-S3-M16R8|OLED-1.3": {
+    "version": "1.3.0",
+    "filename": "chatbot-esp32s3-m16r8-1.3.0.bin",
+    "url": "https://example-cdn.com/firmware/chatbot-esp32s3-m16r8-1.3.0.bin",
+    "size": 524288,
+    "sha256": "replace_with_real_sha256_hex",
+    "address": 65536,
+    "notes": "Single-app binary, flash at 0x10000, ensure partitions configured."
+  },
+
+  "MochiNav|ESP32-S3-M16R8|OLED-1.3": {
+    "version": "2.0.0",
+    "parts": [
+      {
+        "address": 0,
+        "url": "https://example-cdn.com/firmware/bootloader.bin"
+      },
+      {
+        "address": 4096,
+        "url": "https://example-cdn.com/firmware/partitions.bin"
+      },
+      {
+        "address": 65536,
+        "url": "https://example-cdn.com/firmware/app.bin"
+      }
+    ],
+    "notes": "Multi-part firmware with bootloader and partitions."
+  }
+}
