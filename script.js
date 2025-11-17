@@ -64,8 +64,9 @@ function updateProgress(pct, loaded, total){
 
 // Default option lists (used when HTML doesn't contain data-* options)
 const defaultPrograms = [
-  { id: 'mochinav', label: 'MochiNav', meta: 'Navigation module' },
-  { id: 'chatbot', label: 'ChatBot AI', meta: 'AI assistant' }
+  { id: 'OfficeBox', label: 'Office BOX', meta: 'AI assistant' },
+  { id: 'gymBox', label: 'GYM BOX', meta: 'Traning assistant ' },
+  { id: 'chatbot', label: 'Chatbot AI', meta: 'AI assistant' }
 ];
 const defaultChips = [
   { id: 'ESP32-S3-M16R8', label: 'ESP32-S3 M16R8' },
